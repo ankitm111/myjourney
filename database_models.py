@@ -1,8 +1,13 @@
-from myjourney import db
+from myjourney import db, app
+from passlib.apps import custom_app_context as pwd_context
+from itsdangerous import (TimedJSONWebSignatureSerializer
+                          as Serializer, BadSignature, SignatureExpired)
+
 
 class users(db.Model):
     id = db.Column(db.Integer, primary_key=True)    
     user_id = db.Column(db.String(30), unique=True)
+    password_hash = db.Column(db.String(128))
     name = db.Column(db.String(40))
     email = db.Column(db.String(40), unique=True)
     phone = db.Column(db.String(11))
@@ -14,6 +19,28 @@ class users(db.Model):
         self.email = email
         self.phone = phone
         self.journeys = []
+
+    def hash_password(self, password):
+        self.password_hash = pwd_context.encrypt(password)
+
+    def verify_password(self, password):
+        return pwd_context.verify(password, self.password_hash)
+
+    def generate_auth_token(self, expiration = 60000):
+        s = Serializer(app.config['SECRET_KEY'], expires_in = expiration)
+        return s.dumps({ 'user_id': self.user_id })
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None # valid token, but expired
+        except BadSignature:
+            return None # invalid token
+        user = users.query.filter_by(user_id=data['user_id']).first()
+        return user
 
 
 class journeys(db.Model):
@@ -41,12 +68,14 @@ class points(db.Model):
     point_datetime = db.Column(db.DateTime)
     images = db.relationship('images', backref='point', lazy='dynamic')
 
-    def __init__(self, name, story, latitude, longitude):
+    def __init__(self, name, story, journey_id, latitude, longitude, datetime):
         self.point_name = name
         self.point_story = story
+        self.journey_id = journey_id
 #        self.point_lat_long = "POINT(latitude, longitude)"
         self.latitude = latitude
         self.longitude = longitude
+        self.point_datetime = datetime
         self.images = []
 
 

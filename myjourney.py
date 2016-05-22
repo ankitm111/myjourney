@@ -1,10 +1,13 @@
-from flask import Flask, jsonify, abort, request
+from flask import Flask, jsonify, abort, request, g
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+from flask.ext.httpauth import HTTPBasicAuth
 
 app = Flask(__name__)
-#ankitm111:@
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://localhost/myjourneydb'
+app.config['SECRET_KEY'] = 'sapkit111'
 db = SQLAlchemy(app)
+auth = HTTPBasicAuth()
 
 import database_models
 
@@ -12,46 +15,75 @@ import database_models
 def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
-@app.route('/<username>')
-def index(username=None):
-    if username is None:
-        return "Please log in"
-    else:
-        return "Hi!! Welcome %s" % username
+@auth.verify_password
+def verify_password(username_or_token, password):
+    # first try to authenticate by token
+    print("user %s  pwd %s" % (username_or_token, password))
+    user = database_models.users.verify_auth_token(username_or_token)
+    if not user:
+        # try to authenticate with username/password
+        user = database_models.users.query.filter_by(user_id=username_or_token).first()
+        if not user or not user.verify_password(password):
+            return False
+    g.user = user
+    return True
+
+
+@app.route('/myjourney/token')
+@auth.login_required
+def get_auth_token():
+    token = g.user.generate_auth_token()
+    return jsonify({'token': token.decode('ascii')}) 
+
 
 @app.route('/myjourney/adduser', methods=['POST'])
 def adduser():
-    print(request.json)
-    if not request.json or not 'user_id' in request.json or not 'user_name' in request.json:
+    if not request.json or not 'user_id' in request.json or not 'user_name' in request.json or not 'password' in request.json:
         abort(400)
-    
+
+    user = database_models.users.query.filter_by(user_id=request.json['user_id']).first()
+    if user is not None:
+        # existing user
+        abort(400)
+
     content = request.json
-    newuser = database_models.users(content['user_id'], content['user_name'], content.get('email', ''),
-                                    content.get('phone', ''))
+    newuser = database_models.users(content['user_id'], content['user_name'], content.get('email', ''), content.get('phone', ''))
+    newuser.hash_password(content['password'])
+
     db.session.add(newuser)
     db.session.commit()
     u = database_models.users.query.filter_by(user_id=content['user_id']).first()
-    print(type(u))
-    print(u.id)
     return jsonify({'success' : u.id}), 201
 
-@app.route('/myjourney/addjourney/<user_id>', methods=['POST'])
-def addjourney(user_id):
-    content = request.json
+
+@app.route('/myjourney/addjourney', methods=['POST'])
+@auth.login_required
+def addjourney():
     if not request.json or not 'name' in request.json:
         abort(400)
 
-    journey = database_models.journeys(request.json['name'], user_id, request.json.get('description', ''))
+    content = request.json
+    if not database_models.users.query.filter_by(user_id=g.user.user_id).first():
+        abort(400)
+
+    journey = database_models.journeys(content['name'], g.user.user_id, content.get('description', ''))
     db.session.add(journey)
     db.session.commit()
-    return jsonify({'success' : True}), 201
+    journey_id = database_models.journeys.query.filter_by(user_id=g.user.user_id, journey_name=content['name']).first().journey_id
+    return jsonify({'success' : journey_id}), 201
+
 
 @app.route('/myjourney/addpoint/<int:journey_id>', methods=['POST'])
+@auth.login_required
 def addpoint(journey_id):
     content = request.json
+    if not request.json or not 'latitude' in content or not 'longitude' in content:
+        abort(400)
+
+    point = database_models.points(content.get('name', ''), content.get('story', ''), journey_id, content['latitude'], content['longitude'], datetime.now()) 
+    db.session.add(point)
+    db.session.commit()
     return jsonify({'success' : True}), 201
-
-
 
 
 if __name__ == '__main__':
