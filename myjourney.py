@@ -18,7 +18,6 @@ def not_found(error):
 @auth.verify_password
 def verify_password(username_or_token, password):
     # first try to authenticate by token
-    print("user %s  pwd %s" % (username_or_token, password))
     user = database_models.users.verify_auth_token(username_or_token)
     if not user:
         # try to authenticate with username/password
@@ -66,11 +65,11 @@ def addjourney():
     if not database_models.users.query.filter_by(user_id=g.user.user_id).first():
         abort(400)
 
-    journey = database_models.journeys(content['name'], g.user.user_id, content.get('description', ''))
+    journey = database_models.journeys(content['name'], g.user.id, content.get('description', ''))
     db.session.add(journey)
     db.session.commit()
-    journey_id = database_models.journeys.query.filter_by(user_id=g.user.user_id, journey_name=content['name']).first().journey_id
-    return jsonify({'success' : journey_id}), 201
+    journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_name=content['name']).first()
+    return jsonify({'success' : journey.journey_id}), 201
 
 
 @app.route('/myjourney/addpoint/<int:journey_id>', methods=['POST'])
@@ -84,6 +83,13 @@ def addpoint(journey_id):
     db.session.add(point)
     db.session.commit()
     return jsonify({'success' : True}), 201
+
+
+@app.route('/myjourney/getalljourneys', methods=['GET'])
+@auth.login_required
+def getalljourneys():
+    journeys = g.user.journeys
+    return jsonify({'journeys' : [j.serialize for j in journeys.all()]}), 201
 
 
 if __name__ == '__main__':

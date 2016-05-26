@@ -56,13 +56,21 @@ class journeys(db.Model):
         self.journey_description = description
         self.points = []
 
+    @property
+    def serialize(self):
+        return {
+            'id' : self.journey_id,
+            'name': self.journey_name, 
+            'description': self.journey_description,
+            'point' : [p.serialize for p in self.points.all()]
+        }
+
 
 class points(db.Model):
     point_id = db.Column(db.Integer, primary_key=True)
     journey_id = db.Column(db.Integer, db.ForeignKey('journeys.journey_id'))
     point_name = db.Column(db.String(20))
     point_story = db.Column(db.String(50))
-#    point_lat_long = db.Column(Geometry('POINT'))
     point_latitude = db.Column(db.Float)
     point_longitude = db.Column(db.Float)
     point_datetime = db.Column(db.DateTime)
@@ -72,11 +80,21 @@ class points(db.Model):
         self.point_name = name
         self.point_story = story
         self.journey_id = journey_id
-#        self.point_lat_long = "POINT(latitude, longitude)"
         self.latitude = latitude
         self.longitude = longitude
         self.point_datetime = datetime
         self.images = []
+
+    @property
+    def serialize(self):
+        return {
+            'id' : self.point_id,
+            'name': self.point_name, 
+            'story': self.point_story,
+            'latitude' : self.point_latitude,
+            'longitude' : self.point_longitude,
+            'datetime' : self.point_datetime
+        }
 
 
 class images(db.Model):
