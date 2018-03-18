@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, abort, request, g
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from flask.ext.httpauth import HTTPBasicAuth
+from flask_httpauth import HTTPBasicAuth
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://localhost/myjourneydb'
@@ -62,7 +62,7 @@ def addjourney():
         abort(400)
 
     content = request.json
-    if not database_models.users.query.filter_by(user_id=g.user.user_id).first():
+    if not database_models.users.query.filter_by(user_id=g.user.id).first():
         abort(400)
 
     journey = database_models.journeys(content['name'], g.user.id, content.get('description', ''))
@@ -72,15 +72,33 @@ def addjourney():
     return jsonify({'success' : journey.journey_id}), 201
 
 
-@app.route('/myjourney/addpoint/<int:journey_id>', methods=['POST'])
+@app.route('/myjourney/addpoint', methods=['POST'])
 @auth.login_required
-def addpoint(journey_id):
+def addpoint():
     content = request.json
-    if not request.json or not 'latitude' in content or not 'longitude' in content:
+    if not content or not 'journey_name' in content or not 'latitude' in content or not 'point_name' in content or not 'longitude' in content or not 'datetime' in content:
         abort(400)
 
-    point = database_models.points(content.get('name', ''), content.get('story', ''), journey_id, content['latitude'], content['longitude'], datetime.now()) 
+    journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_name=content['journey_name']).first()
+    if journey is None:
+        abort(400)
+
+    point = database_models.points(content['point_name'], journey.journey_id, content.get('story', ''), content['latitude'], content['longitude'], datetime) 
     db.session.add(point)
+    db.session.commit()
+    return jsonify({'success' : True}), 201
+
+
+@app.route('/myjourney/addimage', methods=['POST'])
+@auth.login_required
+def addimage():
+    content = request.json
+    if not content or not 'point_name' in content or not 'image' in content:
+        abort(400)
+
+    point = database_models.points.query.filter_by(user_id=g.user.id, point_name=content['point_name']) 
+    image = database_models.images(point.point_id, image)
+    db.session.add(image)
     db.session.commit()
     return jsonify({'success' : True}), 201
 
@@ -90,6 +108,61 @@ def addpoint(journey_id):
 def getalljourneys():
     journeys = g.user.journeys
     return jsonify({'journeys' : [j.serialize for j in journeys.all()]}), 201
+
+
+@app.route('/myjourney/getjourneynames', methods=['GET'])
+@auth.login_required
+def getjourneynames():
+    journeys = g.user.journeys
+    return jsonify({'journeys' : [j.journey_name for j in journeys.all()]}), 201
+
+
+@app.route('/myjourney/getjourneydetails/<journey_name>', methods=['GET'])
+@auth.login_required
+def getjourneydetails(journey_name):
+    j = None
+    for journey in g.user.journeys:
+        if journey.journey_name == journey_name:
+            j = journey
+    if j:
+        return jsonify({'journey' : j.serialize}), 201
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/getimagesforpoint', methods=['GET'])
+@auth.login_required
+def getimagesforpoint():
+    content = request.json
+    if not content or not 'point_name' in content or not journey_name in content:
+        abort(400)
+    
+    journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_name=journey_name)
+    if journey:
+        point = database_models.points.query.filter_by(journey_id=journey.journey_id, point_name=point_name)
+        if point:
+            images = database_models.images.query.filter_by(point_id=point.point_id)
+            return jsonify({'images' : [i.serialize for i in images.all()]}), 201
+        else:
+            abort(400)
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/getimage', methods=['GET'])
+@auth.login_required
+def getimage():
+    content = request.json
+    if not content or not 'image_filename' in content:
+        abort(400)
+
+    try:
+        with open(content['image_filename'], 'r') as f:
+            image = f.read()
+    except:
+        abort(400)
+
+    return jsonify({'image' : image}), 201
 
 
 if __name__ == '__main__':

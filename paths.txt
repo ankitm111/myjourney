@@ -1,5 +1,21 @@
 export PATH=/Applications/Postgres.app/Contents/Versions/9.5/bin:$PATH
 
+#Starting postgres:
+pg_ctl -D /usr/local/var/postgres start
+
+#Stopping postgres:
+pg_ctl -D /usr/local/var/postgres stop
+
+#Create a db:
+createdb <db name>
+
 # enables PostGis extension in postgres
 CREATE EXTENSION postgis;
 
+#To create a database
+python
+>>> from myjourney import db
+>>> db.create_all()
+
+# To connec to the database
+psql myjourneydb
