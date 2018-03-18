@@ -19,3 +19,25 @@ python
 
 # To connec to the database
 psql myjourneydb
+
+
+# Add user request
+http://127.0.0.1:5000/myjourney/adduser
+{
+	"user_id": "ankitm111",
+	"user_name": "Ankit Maheshwari",
+	"password": "sapkit111",
+	"email": "ankitm111@gmail.com",
+	"phone": "4087182413"
+}
+
+# Get Auth token
+http://127.0.0.1:5000/myjourney/token
+Basic auth (username and password in the Auth header under the field x-access-token)
+
+# Any other API
+http://127.0.0.1:5000/myjourney/getjourneynames
+Auth header 'x-access-token' = token obtained earlier
+
+
+
