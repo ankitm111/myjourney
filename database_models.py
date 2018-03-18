@@ -5,6 +5,7 @@ from myjourney import db, app
 from passlib.apps import custom_app_context as pwd_context
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
+from werkzeug.security import generate_password_hash, check_password_hash
 
 def randomiamgename(length=20):
    return ''.join(random.choice(string.lowercase) for i in range(length))
@@ -18,8 +19,9 @@ class users(db.Model):
     phone = db.Column(db.String(11))
     journeys = db.relationship('journeys', backref='user', lazy='dynamic')
 
-    def __init__(self, user_id, name, email, phone):
+    def __init__(self, user_id, password_hash, name, email, phone):
         self.user_id = user_id
+        self.password_hash = password_hash
         self.name = name
         self.email = email
         self.phone = phone

@@ -1,13 +1,14 @@
 from flask import Flask, jsonify, abort, request, g
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-from flask_httpauth import HTTPBasicAuth
+from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+from functools import wraps
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://localhost/myjourneydb'
 app.config['SECRET_KEY'] = 'sapkit111'
 db = SQLAlchemy(app)
-auth = HTTPBasicAuth()
 
 import database_models
 
@@ -15,6 +16,7 @@ import database_models
 def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
+"""
 @auth.verify_password
 def verify_password(username_or_token, password):
     # first try to authenticate by token
@@ -26,13 +28,48 @@ def verify_password(username_or_token, password):
             return False
     g.user = user
     return True
+"""
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'x-access-token' in request.headers:
+            token = request.headers['x-access-token']
+
+        if not token:
+            return jsonify({'message': 'Access token missing'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'])
+            g.user = database_models.users.query.filter_by(user_id=data['user_id']).first()
+        except:
+            return jsonify({'message': 'Access token invalid'}), 401
+    
+        return f(*args, **kwargs)
+
+    return decorated
 
 
-@app.route('/myjourney/token')
-@auth.login_required
+@app.route('/myjourney/token', methods=['GET'])
 def get_auth_token():
-    token = g.user.generate_auth_token()
-    return jsonify({'token': token.decode('ascii')}) 
+#    token = g.user.generate_auth_token()
+#    return jsonify({'token': token.decode('ascii')}) 
+    auth = request.authorization
+    if not auth or not auth.username or not auth.password:
+        return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required!"'})
+
+    user = database_models.users.query.filter_by(user_id=auth.username).first()
+    
+    if not user:
+        return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required!"'})
+
+    if check_password_hash(user.password_hash, auth.password):
+        token = jwt.encode({'user_id': user.user_id, 'exp': datetime.utcnow() + timedelta(minutes=60)}, app.config['SECRET_KEY'])
+    return jsonify({"token": token.decode("UTF-8")})
+
+
+    return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required!"'})
 
 
 @app.route('/myjourney/adduser', methods=['POST'])
@@ -46,9 +83,8 @@ def adduser():
         abort(400)
 
     content = request.json
-    newuser = database_models.users(content['user_id'], content['user_name'], content.get('email', ''), content.get('phone', ''))
-    newuser.hash_password(content['password'])
-
+    hashed_password = generate_password_hash(content['password'], method='sha256')
+    newuser = database_models.users(content['user_id'], hashed_password, content['user_name'], content.get('email', ''), content.get('phone', ''))
     db.session.add(newuser)
     db.session.commit()
     u = database_models.users.query.filter_by(user_id=content['user_id']).first()
@@ -56,7 +92,7 @@ def adduser():
 
 
 @app.route('/myjourney/addjourney', methods=['POST'])
-@auth.login_required
+@token_required
 def addjourney():
     if not request.json or not 'name' in request.json:
         abort(400)
@@ -73,7 +109,7 @@ def addjourney():
 
 
 @app.route('/myjourney/addpoint', methods=['POST'])
-@auth.login_required
+@token_required
 def addpoint():
     content = request.json
     if not content or not 'journey_name' in content or not 'latitude' in content or not 'point_name' in content or not 'longitude' in content or not 'datetime' in content:
@@ -90,7 +126,7 @@ def addpoint():
 
 
 @app.route('/myjourney/addimage', methods=['POST'])
-@auth.login_required
+@token_required
 def addimage():
     content = request.json
     if not content or not 'point_name' in content or not 'image' in content:
@@ -104,21 +140,21 @@ def addimage():
 
 
 @app.route('/myjourney/getalljourneys', methods=['GET'])
-@auth.login_required
+@token_required
 def getalljourneys():
     journeys = g.user.journeys
     return jsonify({'journeys' : [j.serialize for j in journeys.all()]}), 201
 
 
 @app.route('/myjourney/getjourneynames', methods=['GET'])
-@auth.login_required
+@token_required
 def getjourneynames():
     journeys = g.user.journeys
     return jsonify({'journeys' : [j.journey_name for j in journeys.all()]}), 201
 
 
 @app.route('/myjourney/getjourneydetails/<journey_name>', methods=['GET'])
-@auth.login_required
+@token_required
 def getjourneydetails(journey_name):
     j = None
     for journey in g.user.journeys:
@@ -131,7 +167,7 @@ def getjourneydetails(journey_name):
 
 
 @app.route('/myjourney/getimagesforpoint', methods=['GET'])
-@auth.login_required
+@token_required
 def getimagesforpoint():
     content = request.json
     if not content or not 'point_name' in content or not journey_name in content:
@@ -150,7 +186,7 @@ def getimagesforpoint():
 
 
 @app.route('/myjourney/getimage', methods=['GET'])
-@auth.login_required
+@token_required
 def getimage():
     content = request.json
     if not content or not 'image_filename' in content:
