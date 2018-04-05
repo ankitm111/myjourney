@@ -98,28 +98,26 @@ def addjourney():
         abort(400)
 
     content = request.json
-    if not database_models.users.query.filter_by(user_id=g.user.id).first():
-        abort(400)
 
-    journey = database_models.journeys(content['name'], g.user.id, content.get('description', ''))
+    journey = database_models.journeys(content['name'], g.user.id, content.get('description', ''), datetime.now())
     db.session.add(journey)
     db.session.commit()
     journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_name=content['name']).first()
     return jsonify({'success' : journey.journey_id}), 201
 
 
-@app.route('/myjourney/addpoint', methods=['POST'])
+@app.route('/myjourney/<journey_id>/addpoint', methods=['POST'])
 @token_required
-def addpoint():
+def addpoint(journey_id):
     content = request.json
-    if not content or not 'journey_name' in content or not 'latitude' in content or not 'point_name' in content or not 'longitude' in content or not 'datetime' in content:
+    if not content or not 'latitude' in content or not 'point_name' in content or not 'longitude' in content:
         abort(400)
 
-    journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_name=content['journey_name']).first()
+    journey = database_models.journeys.query.filter_by(user_id=g.user.id, journey_id=journey_id).first()
     if journey is None:
         abort(400)
 
-    point = database_models.points(content['point_name'], journey.journey_id, content.get('story', ''), content['latitude'], content['longitude'], datetime) 
+    point = database_models.points(content['point_name'], journey.journey_id, content.get('story', ''), content['latitude'], content['longitude'], datetime.now()) 
     db.session.add(point)
     db.session.commit()
     return jsonify({'success' : True}), 201
@@ -146,20 +144,18 @@ def getalljourneys():
     return jsonify({'journeys' : [j.serialize for j in journeys.all()]}), 201
 
 
-@app.route('/myjourney/getjourneynames', methods=['GET'])
+@app.route('/myjourney/getjourneyids', methods=['GET'])
 @token_required
 def getjourneynames():
     journeys = g.user.journeys
-    return jsonify({'journeys' : [j.journey_name for j in journeys.all()]}), 201
+    return jsonify({'journeys' : [j.journey_id for j in journeys.all()]}), 201
 
 
-@app.route('/myjourney/getjourneydetails/<journey_name>', methods=['GET'])
+@app.route('/myjourney/getjourneydetails/<journey_id>', methods=['GET'])
 @token_required
-def getjourneydetails(journey_name):
+def getjourneydetails(journey_id):
     j = None
-    for journey in g.user.journeys:
-        if journey.journey_name == journey_name:
-            j = journey
+    j = database_models.journeys.query.filter_by(user_id=g.user.id, journey_id=journey_id).first()
     if j:
         return jsonify({'journey' : j.serialize}), 201
     else:
