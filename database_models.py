@@ -88,8 +88,8 @@ class points(db.Model):
         self.point_name = name
         self.journey_id = journey_id
         self.point_story = story
-        self.latitude = latitude
-        self.longitude = longitude
+        self.point_latitude = latitude
+        self.point_longitude = longitude
         self.point_datetime = datetime
         self.images = []
 

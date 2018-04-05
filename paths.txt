@@ -40,4 +40,18 @@ http://127.0.0.1:5000/myjourney/getjourneynames
 Auth header 'x-access-token' = token obtained earlier
 
 
+# Add a journey
+http://127.0.0.1:5000/myjourney/addjourney
+{
+	"name": "my_first_journey",
+	"description": "my first description"
+}
 
+
+# Add a point
+http://127.0.0.1:5000/myjourney/1/addpoint
+{
+	"point_name": "my_point_1",
+	"latitude": 1.0,
+	"longitude": 2.0
+}
