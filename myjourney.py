@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, abort, request, g
+from flask import Flask, jsonify, abort, request, g, make_response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -66,13 +66,12 @@ def get_auth_token():
 
     if check_password_hash(user.password_hash, auth.password):
         token = jwt.encode({'user_id': user.user_id, 'exp': datetime.utcnow() + timedelta(minutes=60)}, app.config['SECRET_KEY'])
-    return jsonify({"token": token.decode("UTF-8")})
-
+        return jsonify({"token": token.decode("UTF-8")})
 
     return make_response('Could not verify', 401, {'WWW-Authenticate' : 'Basic realm="Login required!"'})
 
 
-@app.route('/myjourney/adduser', methods=['POST'])
+@app.route('/myjourney/user', methods=['POST'])
 def adduser():
     if not request.json or not 'user_id' in request.json or not 'user_name' in request.json or not 'password' in request.json:
         abort(400)
@@ -91,7 +90,31 @@ def adduser():
     return jsonify({'success' : u.id}), 201
 
 
-@app.route('/myjourney/addjourney', methods=['POST'])
+@app.route('/myjourney/user/<user_id>', methods=['GET'])
+@token_required
+def getuserdetails(user_id):
+    u = None
+    u = database_models.users.query.filter_by(user_id=g.user.id).first()
+    if u:
+        return jsonify({'user' : u.serialize}), 201
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/user/<user_id>', methods=['DELETE'])
+@token_required
+def deleteuser(user_id):
+    u = None
+    u = database_models.users.query.filter_by(user_id=g.user.id).first()
+    if u:
+        db.session.delete(u)
+        db.session.commit()
+        return jsonify({'user' : u.user_id}), 201
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/journey', methods=['POST'])
 @token_required
 def addjourney():
     if not request.json or not 'name' in request.json:
@@ -106,7 +129,33 @@ def addjourney():
     return jsonify({'success' : journey.journey_id}), 201
 
 
-@app.route('/myjourney/<journey_id>/addpoint', methods=['POST'])
+@app.route('/myjourney/journey/<journey_id>', methods=['GET'])
+@token_required
+def getjourneydetails(journey_id):
+    j = None
+    j = database_models.journeys.query.filter_by(user_id=g.user.id, journey_id=journey_id).first()
+    if j:
+        return jsonify({'journey' : j.serialize}), 201
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/journey/<journey_id>', methods=['DELETE'])
+@token_required
+def deletejourney(journey_id):
+
+    print (journey_id)
+    j = database_models.journeys.query.filter_by(user_id=g.user.id, journey_id=journey_id).first()
+
+    if j is None:
+        return jsonify({'success': -1}), 201
+
+    db.session.delete(j)
+    db.session.commit()
+    return jsonify({'success' : journey_id}), 201
+
+
+@app.route('/myjourney/journey/<journey_id>/point', methods=['POST'])
 @token_required
 def addpoint(journey_id):
     content = request.json
@@ -121,6 +170,31 @@ def addpoint(journey_id):
     db.session.add(point)
     db.session.commit()
     return jsonify({'success' : True}), 201
+
+
+@app.route('/myjourney/journey/<journeyId>/point/<pointId>', methods=['GET'])
+@token_required
+def getpointdetails(journeyId, pointId):
+    p = None
+    p = database_models.points.query.filter_by(journey_id=journeyId, point_id=pointId).first()
+    if p:
+        return jsonify({'point' : p.serialize}), 201
+    else:
+        abort(400)
+
+
+@app.route('/myjourney/journey/<journeyId>/point/<pointId>', methods=['DELETE'])
+@token_required
+def deletepoint(journeyId, pointId):
+
+    p = database_models.points.query.filter_by(journey_id=journeyId, point_id=pointId).first()
+
+    if p is None:
+        return jsonify({'success': -1}), 201
+
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({'success' : pointId}), 201
 
 
 @app.route('/myjourney/addimage', methods=['POST'])
@@ -151,17 +225,6 @@ def getjourneynames():
     return jsonify({'journeys' : [j.journey_id for j in journeys.all()]}), 201
 
 
-@app.route('/myjourney/getjourneydetails/<journey_id>', methods=['GET'])
-@token_required
-def getjourneydetails(journey_id):
-    j = None
-    j = database_models.journeys.query.filter_by(user_id=g.user.id, journey_id=journey_id).first()
-    if j:
-        return jsonify({'journey' : j.serialize}), 201
-    else:
-        abort(400)
-
-
 @app.route('/myjourney/getimagesforpoint', methods=['GET'])
 @token_required
 def getimagesforpoint():
@@ -181,9 +244,9 @@ def getimagesforpoint():
         abort(400)
 
 
-@app.route('/myjourney/getimage', methods=['GET'])
+@app.route('/myjourney/<imageId>', methods=['GET'])
 @token_required
-def getimage():
+def getimage(imageId):
     content = request.json
     if not content or not 'image_filename' in content:
         abort(400)
